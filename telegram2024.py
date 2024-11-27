@@ -37,12 +37,14 @@ async def button_handler(update, context):
 
     elif query.data == "book":
         await query.message.reply_text("запись на консультацию")
+        return DATE_START
+
 
     elif query.data == "schedule":
-        await query.massage.reply_text("вторник 16.00, четверг 16.00")
+        await query.message.reply_text("вторник 16.00, четверг 16.00")
 
     elif query.data == "comment":
-        await query.massage.reply_text ("Напишите свой отзыв после консультации, а так же занятий")
+        await query.message.reply_text ("Напишите свой отзыв после консультации, а так же занятий")
 
 
 async def question(update, context):
@@ -68,13 +70,17 @@ async def guests(update, context):
 async def bron(update, context):
     context.user_data['bron'] = update.message.text
     booking_details = (
-    f"Ваши данные для бронирования:\n"
+    f"Ваши данные для бронирования:\n",
     f"- Дата и время занятия: {context.user_data['date_start']}\n"
-    f"- Возраст:" {context.user_data['vozrast']}\n"
+    f"- Возраст: {context.user_data['vozrast']}\n"
     f"- Тип занятия: {context.user_data['guests']}\n"
     "Если всё верно, я перезвоню Вам для подтверждения."
     )
-    
+async def cancel(update, context):
+    await update.message.reply_text("Бронирование отменено. Возвращайтесь, когда будете готовы!", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
+
+app.add_handler(CommandHandler("start", start_command))
 booking_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(button_handler, pattern="^book$")],
     states = {
@@ -86,12 +92,8 @@ booking_handler = ConversationHandler(
     fallbacks = [CommandHandler("cancel", cancel)],
     )
 
-    app.add_handler(booking_handler)
+    
+app.add_handler(booking_handler)
 
-app.add_handler(CommandHandler("start", start_command))
-app.add_handler(CallbackQueryHandler(button_handler))
 if __name__ == '__main__':
     app.run_polling()
-
-
-
