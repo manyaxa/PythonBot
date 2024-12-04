@@ -49,7 +49,15 @@ async def button_handler(update, context):
         await query.message.reply_text("вторник 16.00, четверг 16.00")
 
     elif query.data == "comment":
-        await query.message.reply_text("Напишите свой отзыв после консультации, а так же занятий")
+        comment_image_url = "image/leasson1.jpg"
+        caption = "Вот как проходят мои занятия и отзывы о них!"
+        try:
+            await query.message.reply_photo(photo=comment_image_url, caption=caption)
+        except FileNotFoundError as e:
+            await query.message.reply_text(f"Помилка: файл {e.filename} не знайдено.")
+        except Exception as e :
+            await query.message.reply_text(f"Виникла помилка: {str(e)}")
+            #await query.message.reply_text("Напишите свой отзыв после консультации, а так же занятий")
 
 
 async def question(update, context):
