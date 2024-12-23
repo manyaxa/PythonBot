@@ -2,28 +2,119 @@
 from telegram import InputMediaPhoto, Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, \
     MessageHandler, filters
+import sqlite3
+import asyncio
+
+
 
 # Стадії конверсії
 DATE_START, VOZRAST, GUESTS, BRON = range(4)
 app = ApplicationBuilder().token('7581620320:AAEfu4zc2kfr6iSLarP6bYHX8zK5tLNatuI').build()
 
 
-async def start(update, context):
-    await update.message.reply_text(
-        "Рада приветствовать Вас в боте, который поможет нам быстрее связаться\n"
-        "Я помогу Вам с записью на консультацию, выбором удобного времени и обратной связью после консультации.\n"
-        "/information - Уманец Мария Вадимовна - логопед, дефектолог. Работаю с детьми от 4-х лет, занимаюсь постановкой и коррекцией речи, а так же работаю с дизартрией. Занятия провожу онлайн. Номер телефона для дополнительной информации +380(98)-701-38-22.\n"
-        "/book - запись на консультацию\n"
-        "/schedule - вторник 16.00, четверг 16.00\n"
-        "/comment - Напишите свой отзыв после консультации, а так же занятий"
-    )
+def setup_database():
+    connection = sqlite3.connect("database.db")
+    cursor = connection.cursor()
+    # Створення таблиці користувачів
+    cursor.execute("""
+       CREATE TABLE IF NOT EXISTS users (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           username TEXT NOT NULL,
+           chat_id INTEGER NOT NULL UNIQUE,
+           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+       )
+       """)
+
+    # Створення таблиці бронювань
+    cursor.execute("""
+       CREATE TABLE IF NOT EXISTS bookings (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           user_id INTEGER NOT NULL,
+           date_start TEXT NOT NULL,
+           vozrast TEXT NOT NULL,
+           guests TEXT NOT NULL,
+           bron TEXT NOT NULL,
+           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+           FOREIGN KEY (user_id) REFERENCES users (id)
+       )
+       """)
+    connection.commit()
+    connection.close()
+    print("База даних успішно налаштована.")
+
+async def broadcast_message(update, context):
+    users = get_all_users()
+    message = "Здраствуйте, приглашаю Вас и Вашего ребёнка на консультацию, на который мы проверим произношение, понимание и правильность речи, а так же подготовку ребёнка к школе."
+    successful = 0
+    failed = 0
+
+    for chat_id in users:
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=message)
+            successful += 1
+        except Exception as e:
+            print(f"Не удалось отправить сообщение пользователю {chat_id}: {e}")
+            failed += 1
+        await asyncio.sleep(0.1)
+
+    await update.message.reply_text(f"Рассылка завершена. Успешно: {successful}, Неудачно: {failed}")
+
+
+
+def add_user(username, chat_id):
+    connection = sqlite3.connect("database.db")
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+        INSERT OR IGNORE INTO users (username, chat_id)
+        VALUES (?, ?)
+        """, (username, chat_id))
+        connection.commit()
+        print(f"Користувач {username} успішно доданий.")
+    except sqlite3.Error as e:
+        print(f"Помилка при додаванні користувача: {e}")
+    finally:
+        connection.close()
+
+def add_booking(chat_id, date_start, vozrast, quests, bron):
+    connection = sqlite3.connect("database.db")
+    cursor = connection.cursor()
+    try:
+        cursor.execute( "SELECT id FROM users WHERE chat_id = ?", (chat_id))
+        user_id = cursor.fetchone()
+        if user_id:
+            user_id = user_id[0]
+            cursor.execute("""
+            INSERT INTO bookings (user_id, date_start, vozrast, quests, bron)
+            VALUES (?, ?, ?, ?, ?)
+            """, (user_id, date_start, vozrast, quests, bron))
+            connection.commit()
+            print("Бронювання успішно додано.")
+        else:
+            print ("Користувача не знайдено в базі.")
+    except sqlite3.Error as e:
+        print(f"Помилка при додаванні бронювання : {e}")
+    finally:
+        connection.close()
+
+def get_all_users():
+    connection = sqlite3.connect("database.db")
+    cursor = connection.cursor()
+    cursor.execute("SELECT chat_id FROM users")
+    users = cursor.fetchall()
+    connection.close()
+    return [user[0] for user in users]
 
 
 async def start_command(update, context):
+    username = update.effective_user.username or "NoUsername"
+    chat_id = update.effective_user.id
+
+    add_user(username, chat_id)
     inline_keyboard = [
-        [InlineKeyboardButton("запись на консультацию", callback_data="book")],
-        [InlineKeyboardButton("вторник 16.00, четверг 16.00", callback_data="schedule")],
-        [InlineKeyboardButton("Напишите свой отзыв после консультации, а так же занятий", callback_data="comment")],
+        [InlineKeyboardButton("Консультация", callback_data="book")],
+        [InlineKeyboardButton("График", callback_data="schedule")],
+        [InlineKeyboardButton("Оставить отзыв", callback_data="comment")],
     ]
     markup = InlineKeyboardMarkup(inline_keyboard)
 
@@ -41,12 +132,12 @@ async def button_handler(update, context):
             "Уманец Мария Вадимовна - логопед, дефектолог. Работаю с детьми от 4-х лет, занимаюсь постановкой и коррекцией речи, а так же работаю с дизартрией. Занятия провожу онлайн. Номер телефона для дополнительной информации +380(98)-701-38-22.\n")
 
     elif query.data == "book":
-        await query.message.reply_text("запись на консультацию")
+        await query.message.reply_text("Чтобы записаться на консультацию, введите свои данные, как я могу к Вам обращаться и коротко про Ваш запрос.")
         return DATE_START
 
 
     elif query.data == "schedule":
-        await query.message.reply_text("вторник 16.00, четверг 16.00")
+        await query.message.reply_text("вторник 16.00 или четверг 16.00")
 
     elif query.data == "comment":
         comment_image_url = "image/leasson1.jpg"
@@ -66,7 +157,7 @@ async def question(update, context):
 
 async def date_start(update, context):
     context.user_data['date_start'] = update.message.text
-    await update.message.reply_text("Введите дату и время занятия (например 2024-11-20, 16.00):")
+    await update.message.reply_text("Введите дату и время занятия (например 20.11.2024, 16.00):")
     return VOZRAST
 
 
@@ -78,22 +169,29 @@ async def vozrast(update, context):
 
 async def guests(update, context):
     context.user_data['guests'] = update.message.text
-    reply_keyboard = [["Консультация, Занятие"]]
+    reply_keyboard = [["Консультация"]]
     markup = ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True, one_time_keyboard=True)
     await update.message.reply_text("Выберите тип встречи:", reply_markup=markup)
     return BRON
 
 
 async def bron(update, context):
+    chat_id = update.effective_user.id
     context.user_data['bron'] = update.message.text
     booking_details = (
         f"Ваши данные для бронирования:\n",
-        f"- Дата и время занятия: {context.user_data['date_start']}\n"
+        f"- Дата и время консультации: {context.user_data['date_start']}\n"
         f"- Возраст: {context.user_data['vozrast']}\n"
         f"- Тип занятия: {context.user_data['guests']}\n"
         "Если всё верно, я перезвоню Вам для подтверждения."
     )
-
+    add_booking(
+        chat_id,
+        context.user_data['date_start'],
+        context.user_data['vozrast'],
+        context.user_data['guests'],
+        context.user_data['bron']
+    )
 
 async def cancel(update, context):
     await update.message.reply_text("Бронирование отменено. Возвращайтесь, когда будете готовы!",
@@ -127,6 +225,6 @@ async def send_photos(update,context):
 app.add_handler(CommandHandler("sendphotos", send_photos))
 
 app.add_handler(booking_handler)
-
+setup_database()
 if __name__ == '__main__':
     app.run_polling()
