@@ -130,6 +130,7 @@ async def button_handler(update, context):
     if query.data == "information":
         await query.message.reply_text(
             "Уманец Мария Вадимовна - логопед, дефектолог. Работаю с детьми от 4-х лет, занимаюсь постановкой и коррекцией речи, а так же работаю с дизартрией. Занятия провожу онлайн. Номер телефона для дополнительной информации +380(98)-701-38-22.\n")
+        return ConversationHandler.END
 
     elif query.data == "book":
         await query.message.reply_text("Чтобы записаться на консультацию, введите свои данные, как я могу к Вам обращаться и коротко про Ваш запрос.")
@@ -138,6 +139,7 @@ async def button_handler(update, context):
 
     elif query.data == "schedule":
         await query.message.reply_text("вторник 16.00 или четверг 16.00")
+        return ConversationHandler.END
 
     elif query.data == "comment":
         comment_image_url = "image/leasson1.jpg"
@@ -149,6 +151,7 @@ async def button_handler(update, context):
         except Exception as e :
             await query.message.reply_text(f"Виникла помилка: {str(e)}")
             #await query.message.reply_text("Напишите свой отзыв после консультации, а так же занятий")
+        return ConversationHandler.END
 
 
 async def question(update, context):
@@ -179,7 +182,7 @@ async def bron(update, context):
     chat_id = update.effective_user.id
     context.user_data['bron'] = update.message.text
     booking_details = (
-        f"Ваши данные для бронирования:\n",
+        f"Ваши данные для бронирования:\n"
         f"- Дата и время консультации: {context.user_data['date_start']}\n"
         f"- Возраст: {context.user_data['vozrast']}\n"
         f"- Тип занятия: {context.user_data['guests']}\n"
@@ -192,6 +195,8 @@ async def bron(update, context):
         context.user_data['guests'],
         context.user_data['bron']
     )
+    await update.message.reply_text(booking_details, reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
 
 async def cancel(update, context):
     await update.message.reply_text("Бронирование отменено. Возвращайтесь, когда будете готовы!",
@@ -201,7 +206,7 @@ async def cancel(update, context):
 
 app.add_handler(CommandHandler("start", start_command))
 booking_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(button_handler, pattern="^book$")],
+    entry_points=[CallbackQueryHandler(button_handler, pattern="^(information|book|schedule|comment)$")],
     states={
         DATE_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, date_start)],
         VOZRAST: [MessageHandler(filters.TEXT & ~filters.COMMAND, vozrast)],
@@ -209,6 +214,7 @@ booking_handler = ConversationHandler(
         BRON: [MessageHandler(filters.TEXT & ~filters.COMMAND, bron)],
     },
     fallbacks=[CommandHandler("cancel", cancel)],
+    per_user=True
 )
 
 async def send_photos(update,context):
@@ -224,7 +230,8 @@ async def send_photos(update,context):
 
 app.add_handler(CommandHandler("sendphotos", send_photos))
 
-app.add_handler(booking_handler)
 setup_database()
+app.add_handler(booking_handler)
+
 if __name__ == '__main__':
     app.run_polling()
